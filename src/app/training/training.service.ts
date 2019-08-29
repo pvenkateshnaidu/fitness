@@ -3,9 +3,9 @@ import { AngularFirestore } from 'angularfire2/firestore';
 import { Subject } from 'rxjs/Subject';
 import { Subscription } from 'rxjs';
 import 'rxjs/add/operator/map';
-
+import {BehaviorSubject} from "rxjs/BehaviorSubject";
 import { Exercise } from './exercise.model';
-
+import { AngularFireAuth } from 'angularfire2/auth';
 @Injectable()
 export class TrainingService {
   exerciseChanged = new Subject<Exercise>();
@@ -14,8 +14,15 @@ export class TrainingService {
   private availableExercises: Exercise[] = [];
   private runningExercise: Exercise;
   private fbSubs: Subscription[] = [];
-
-  constructor(private db: AngularFirestore) {}
+  private userSubject: BehaviorSubject<any> = new BehaviorSubject<any>(false);
+  uid:any;
+  constructor(private db: AngularFirestore, private afAuth: AngularFireAuth) {
+    this.afAuth.authState          
+    .subscribe(userData => this.userSubject.next(userData));
+}
+get user() {
+return this.userSubject.value.uid;
+}
 
   fetchAvailableExercises() {
     this.fbSubs.push(this.db
@@ -49,7 +56,8 @@ export class TrainingService {
     this.addDataToDatabase({
       ...this.runningExercise,
       date: new Date(),
-      state: 'completed'
+      state: 'completed',
+      uid:this.user
     });
     this.runningExercise = null;
     this.exerciseChanged.next(null);
@@ -61,7 +69,8 @@ export class TrainingService {
       duration: this.runningExercise.duration * (progress / 100),
       calories: this.runningExercise.calories * (progress / 100),
       date: new Date(),
-      state: 'cancelled'
+      state: 'cancelled',
+      uid:this.user
     });
     this.runningExercise = null;
     this.exerciseChanged.next(null);
@@ -73,7 +82,7 @@ export class TrainingService {
 
   fetchCompletedOrCancelledExercises() {
     this.fbSubs.push(this.db
-      .collection('finishedExercises')
+      .collection('finishedExercises', ref => ref.where('uid', '==',this.user))    
       .valueChanges()
       .subscribe((exercises: Exercise[]) => {
         this.finishedExercisesChanged.next(exercises);
